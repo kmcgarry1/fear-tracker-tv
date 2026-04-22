@@ -1,0 +1,14 @@
+        <section class="settings-section">
+          <div class="section-heading">
+            <h2>Cast to TV</h2>
+            <span>Free options by platform</span>
+          </div>
+          <ul class="quick-list">
+            <li>Chromecast: open the display link in Chrome and use Cast tab or Cast screen.</li>
+            <li>Apple TV: open the display link in Safari on iPhone or iPad and use AirPlay screen mirror.</li>
+            <li>Windows to smart TV: use Windows + K to connect with Miracast then fullscreen browser.</li>
+            <li>Android TV: use Smart View, Cast, or Screen Share from quick settings.</li>
+            <li>Universal fallback: HDMI cable from laptop or tablet to TV.</li>
+          </ul>
+          <p class="inline-note">Use the display link on the casted screen and the controller link on your phone.</p>
+        </section>
