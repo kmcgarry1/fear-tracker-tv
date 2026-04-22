@@ -35,6 +35,8 @@ const copyNotice = ref('')
 const castNotice = ref('')
 const displayQrDataUrl = ref('')
 const controllerQrDataUrl = ref('')
+const MAX_SYNC_IMAGE_URLS = 8
+const MAX_SYNC_URL_LENGTH = 320
 
 let hideInterfaceTimer = 0
 let copyNoticeTimer = 0
@@ -111,8 +113,10 @@ const imageUrlsText = computed({
   set: (value: string) => {
     state.imageUrls = value
       .split(/\r?\n|,/) 
-      .map((entry) => entry.trim())
+      .map((entry) => entry.trim().slice(0, MAX_SYNC_URL_LENGTH))
+      .filter((entry) => isSafeHttpUrl(entry))
       .filter(Boolean)
+      .slice(0, MAX_SYNC_IMAGE_URLS)
 
     if (state.activeImageIndex >= state.imageUrls.length) {
       state.activeImageIndex = 0
@@ -306,6 +310,19 @@ function secureBase64Url(bytes: number) {
   crypto.getRandomValues(data)
   const binary = Array.from(data, (value) => String.fromCharCode(value)).join('')
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function isSafeHttpUrl(value: string) {
+  if (!value) {
+    return false
+  }
+
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
 }
 
 function buildLinkedUrl(mode: 'display' | 'controller') {

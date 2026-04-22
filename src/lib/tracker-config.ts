@@ -183,6 +183,9 @@ export function normalizeTrackerState(
   defaults: TrackerState,
 ): TrackerState {
   const maxFear = Number.isFinite(input?.maxFear) ? Math.max(0, Math.round(input?.maxFear ?? defaults.maxFear)) : defaults.maxFear
+  const themeId = typeof input?.themeId === 'string' ? input.themeId : defaults.themeId
+  const presetTheme = THEME_PRESETS.find((preset) => preset.id === themeId) ?? THEME_PRESETS[0]
+  const baseColors = presetTheme.colors
   const imageUrls = Array.isArray(input?.imageUrls)
     ? input.imageUrls.map((value) => value.trim()).filter(Boolean)
     : defaults.imageUrls
@@ -191,16 +194,16 @@ export function normalizeTrackerState(
     fear: clampFear(input?.fear ?? defaults.fear, maxFear),
     maxFear,
     fontId: typeof input?.fontId === 'string' ? input.fontId : defaults.fontId,
-    themeId: typeof input?.themeId === 'string' ? input.themeId : defaults.themeId,
+    themeId,
     colors: {
-      background: input?.colors?.background ?? defaults.colors.background,
-      backgroundAccent: input?.colors?.backgroundAccent ?? defaults.colors.backgroundAccent,
-      accent: input?.colors?.accent ?? defaults.colors.accent,
-      glow: input?.colors?.glow ?? defaults.colors.glow,
-      text: input?.colors?.text ?? defaults.colors.text,
-      ring: input?.colors?.ring ?? defaults.colors.ring,
-      shadow: input?.colors?.shadow ?? defaults.colors.shadow,
-      vignette: input?.colors?.vignette ?? defaults.colors.vignette,
+      background: input?.colors?.background ?? baseColors.background,
+      backgroundAccent: input?.colors?.backgroundAccent ?? baseColors.backgroundAccent,
+      accent: input?.colors?.accent ?? baseColors.accent,
+      glow: input?.colors?.glow ?? baseColors.glow,
+      text: input?.colors?.text ?? baseColors.text,
+      ring: input?.colors?.ring ?? baseColors.ring,
+      shadow: input?.colors?.shadow ?? baseColors.shadow,
+      vignette: input?.colors?.vignette ?? baseColors.vignette,
     },
     globalIcon: typeof input?.globalIcon === 'string' && input.globalIcon ? input.globalIcon : defaults.globalIcon,
     fearIcons: Object.entries(input?.fearIcons ?? {}).reduce<Record<string, string>>((icons, [key, value]) => {

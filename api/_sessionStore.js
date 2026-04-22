@@ -2,13 +2,96 @@ import crypto from 'node:crypto'
 import { Redis } from '@upstash/redis'
 import { createClient } from 'redis'
 
-const SESSION_TTL_SECONDS = 60 * 60 * 12
-const MAX_STATE_BYTES = 24 * 1024
+const DEFAULT_SESSION_TTL_SECONDS = 60 * 60 * 2
+const SESSION_TTL_SECONDS = parseIntInRange(process.env.SESSION_TTL_SECONDS, DEFAULT_SESSION_TTL_SECONDS, 60, 60 * 60 * 24)
+const MAX_STATE_BYTES = 12 * 1024
 const MAX_UPDATES_PER_WINDOW = 18
 const RATE_WINDOW_MS = 10_000
 const SESSION_ID_PATTERN = /^fear-[a-f0-9]{16,48}$/
 const WRITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{24,160}$/
-const MAX_URL_LENGTH = 600
+const MAX_URL_LENGTH = 320
+const MAX_IMAGE_URLS = 8
+
+const THEME_COLORS_BY_ID = {
+  'ember-court': {
+    background: '#140506',
+    backgroundAccent: '#421216',
+    accent: '#ff8a5b',
+    glow: '#ffcc7a',
+    text: '#fff4df',
+    ring: '#7d1f18',
+    shadow: 'rgba(255, 88, 38, 0.35)',
+    vignette: 'rgba(9, 1, 2, 0.74)',
+  },
+  'storm-archive': {
+    background: '#08111b',
+    backgroundAccent: '#18364d',
+    accent: '#77d2ff',
+    glow: '#d6f3ff',
+    text: '#edf6ff',
+    ring: '#26556c',
+    shadow: 'rgba(90, 188, 255, 0.33)',
+    vignette: 'rgba(2, 7, 14, 0.8)',
+  },
+  'verdant-relic': {
+    background: '#07120c',
+    backgroundAccent: '#133821',
+    accent: '#72df87',
+    glow: '#d0ffd7',
+    text: '#ebfff0',
+    ring: '#295d39',
+    shadow: 'rgba(83, 191, 103, 0.3)',
+    vignette: 'rgba(2, 8, 3, 0.78)',
+  },
+  'ashen-throne': {
+    background: '#0e0e12',
+    backgroundAccent: '#2e2c39',
+    accent: '#c5b0ff',
+    glow: '#f0e7ff',
+    text: '#f4efff',
+    ring: '#4d4465',
+    shadow: 'rgba(174, 142, 255, 0.32)',
+    vignette: 'rgba(3, 3, 8, 0.82)',
+  },
+  'sunken-opal': {
+    background: '#041216',
+    backgroundAccent: '#0c3740',
+    accent: '#6de2d7',
+    glow: '#dbffff',
+    text: '#eaffff',
+    ring: '#1f5960',
+    shadow: 'rgba(85, 213, 202, 0.32)',
+    vignette: 'rgba(1, 7, 9, 0.82)',
+  },
+  'gilded-night': {
+    background: '#161007',
+    backgroundAccent: '#41311a',
+    accent: '#f2c66f',
+    glow: '#fff3d0',
+    text: '#fff9ec',
+    ring: '#7b6032',
+    shadow: 'rgba(228, 183, 84, 0.34)',
+    vignette: 'rgba(8, 4, 1, 0.8)',
+  },
+}
+
+const DEFAULT_THEME_COLORS = THEME_COLORS_BY_ID['ember-court']
+
+function parseIntInRange(rawValue, fallbackValue, minValue, maxValue) {
+  const parsed = Number(rawValue)
+
+  if (!Number.isFinite(parsed)) {
+    return fallbackValue
+  }
+
+  const rounded = Math.round(parsed)
+
+  if (rounded < minValue || rounded > maxValue) {
+    return fallbackValue
+  }
+
+  return rounded
+}
 
 function getNow() {
   return Date.now()
@@ -149,21 +232,67 @@ function sanitizeColorValue(value, fallback) {
   return trimmed ? trimmed.slice(0, 40) : fallback
 }
 
-function sanitizeFearIcons(value) {
+function getThemeColors(themeId) {
+  return THEME_COLORS_BY_ID[themeId] || DEFAULT_THEME_COLORS
+}
+
+function colorsEqual(left, right) {
+  return (
+    left.background === right.background &&
+    left.backgroundAccent === right.backgroundAccent &&
+    left.accent === right.accent &&
+    left.glow === right.glow &&
+    left.text === right.text &&
+    left.ring === right.ring &&
+    left.shadow === right.shadow &&
+    left.vignette === right.vignette
+  )
+}
+
+function sanitizeThemeColors(inputColors, presetColors) {
+  const sanitized = {
+    background: sanitizeColorValue(inputColors?.background, presetColors.background),
+    backgroundAccent: sanitizeColorValue(inputColors?.backgroundAccent, presetColors.backgroundAccent),
+    accent: sanitizeColorValue(inputColors?.accent, presetColors.accent),
+    glow: sanitizeColorValue(inputColors?.glow, presetColors.glow),
+    text: sanitizeColorValue(inputColors?.text, presetColors.text),
+    ring: sanitizeColorValue(inputColors?.ring, presetColors.ring),
+    shadow: sanitizeColorValue(inputColors?.shadow, presetColors.shadow),
+    vignette: sanitizeColorValue(inputColors?.vignette, presetColors.vignette),
+  }
+
+  return colorsEqual(sanitized, presetColors) ? undefined : sanitized
+}
+
+function sanitizeFearIcons(value, maxFear, globalIcon) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {}
   }
 
   const normalized = {}
-  const entries = Object.entries(value).slice(0, 64)
+  const entries = Object.entries(value)
 
   for (const [key, icon] of entries) {
     if (!/^\d+$/.test(key)) {
       continue
     }
 
+    const fearValue = Number(key)
+
+    if (!Number.isFinite(fearValue) || fearValue < 0 || fearValue > maxFear) {
+      continue
+    }
+
     if (typeof icon === 'string' && icon.trim()) {
-      normalized[key] = icon.trim().slice(0, 120)
+      const iconId = icon.trim().slice(0, 120)
+
+      if (iconId !== globalIcon) {
+        normalized[String(fearValue)] = iconId
+      }
+    }
+
+    if (Object.keys(normalized).length >= maxFear) {
+      break
     }
   }
 
@@ -178,7 +307,7 @@ function sanitizeImageUrls(value) {
   return value
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
     .filter((entry) => entry && isSafeHttpUrl(entry))
-    .slice(0, 20)
+    .slice(0, MAX_IMAGE_URLS)
     .map((entry) => entry.slice(0, MAX_URL_LENGTH))
 }
 
@@ -203,6 +332,10 @@ export function sanitizeStatePayload(input) {
 
   const maxFear = Number.isFinite(input.maxFear) ? clamp(Math.round(input.maxFear), 1, 30) : 12
   const fear = Number.isFinite(input.fear) ? clamp(Math.round(input.fear), 0, maxFear) : 0
+  const themeId = sanitizeString(input.themeId, 'ember-court', 40)
+  const presetColors = getThemeColors(themeId)
+  const globalIcon = sanitizeString(input.globalIcon, 'game-icons:skull-crossed-bones', 120)
+  const colors = sanitizeThemeColors(input.colors, presetColors)
   const imageUrls = sanitizeImageUrls(input.imageUrls)
   const activeImageIndex = imageUrls.length === 0 ? 0 : clamp(Math.round(Number(input.activeImageIndex) || 0), 0, imageUrls.length - 1)
   const backgroundMode = input.backgroundMode === 'youtube' || input.backgroundMode === 'images' ? input.backgroundMode : 'none'
@@ -211,25 +344,14 @@ export function sanitizeStatePayload(input) {
     fear,
     maxFear,
     fontId: sanitizeString(input.fontId, 'cinzel', 40),
-    themeId: sanitizeString(input.themeId, 'ember-court', 40),
-    colors: {
-      background: sanitizeColorValue(input.colors?.background, '#140506'),
-      backgroundAccent: sanitizeColorValue(input.colors?.backgroundAccent, '#421216'),
-      accent: sanitizeColorValue(input.colors?.accent, '#ff8a5b'),
-      glow: sanitizeColorValue(input.colors?.glow, '#ffcc7a'),
-      text: sanitizeColorValue(input.colors?.text, '#fff4df'),
-      ring: sanitizeColorValue(input.colors?.ring, '#7d1f18'),
-      shadow: sanitizeColorValue(input.colors?.shadow, 'rgba(255, 88, 38, 0.35)'),
-      vignette: sanitizeColorValue(input.colors?.vignette, 'rgba(9, 1, 2, 0.74)'),
-    },
-    globalIcon: sanitizeString(input.globalIcon, 'game-icons:skull-crossed-bones', 120),
-    fearIcons: sanitizeFearIcons(input.fearIcons),
+    themeId,
+    ...(colors ? { colors } : {}),
+    globalIcon,
+    fearIcons: sanitizeFearIcons(input.fearIcons, maxFear, globalIcon),
     backgroundMode,
     youtubeUrl: sanitizeYoutubeUrl(input.youtubeUrl),
     imageUrls,
     activeImageIndex,
-    sessionId: sanitizeString(input.sessionId, '', 64),
-    syncServerUrl: sanitizeString(input.syncServerUrl, '/api', MAX_URL_LENGTH),
   }
 }
 
