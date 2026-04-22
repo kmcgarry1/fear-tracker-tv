@@ -5,7 +5,16 @@ import {
   parseJsonBody,
 } from '../_sessionStore.js'
 
+function setSecurityHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+}
+
 export default async function handler(req, res) {
+  setSecurityHeaders(res)
+
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' })
     return

@@ -1,11 +1,12 @@
 import crypto from 'node:crypto'
 import { Redis } from '@upstash/redis'
+import { createClient } from 'redis'
 
 const SESSION_TTL_SECONDS = 60 * 60 * 12
 const MAX_STATE_BYTES = 24 * 1024
 const MAX_UPDATES_PER_WINDOW = 18
 const RATE_WINDOW_MS = 10_000
-const SESSION_ID_PATTERN = /^fear-[a-f0-9]{8,24}$/
+const SESSION_ID_PATTERN = /^fear-[a-f0-9]{16,48}$/
 const WRITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{24,160}$/
 const MAX_URL_LENGTH = 600
 
@@ -14,6 +15,8 @@ function getNow() {
 }
 
 let redisClient = null
+let redisUrlClient = null
+let redisUrlConnectPromise = null
 
 function getRedisClient() {
   if (redisClient) {
@@ -30,6 +33,33 @@ function getRedisClient() {
   })
 
   return redisClient
+}
+
+async function getRedisUrlClient() {
+  if (!process.env.REDIS_URL) {
+    return null
+  }
+
+  if (!redisUrlClient) {
+    redisUrlClient = createClient({
+      url: process.env.REDIS_URL,
+    })
+
+    redisUrlClient.on('error', () => {
+      // Handled by falling back to in-memory storage if unavailable.
+    })
+
+    redisUrlConnectPromise = redisUrlClient.connect().catch(() => {
+      redisUrlClient = null
+      return null
+    })
+  }
+
+  if (redisUrlConnectPromise) {
+    await redisUrlConnectPromise
+  }
+
+  return redisUrlClient?.isOpen ? redisUrlClient : null
 }
 
 function getLocalSessions() {
@@ -211,7 +241,37 @@ async function readFromStore(sessionId) {
   const redis = getRedisClient()
 
   if (redis) {
-    return (await redis.get(sessionKey(sessionId))) || null
+    const value = await redis.get(sessionKey(sessionId))
+
+    if (!value) {
+      return null
+    }
+
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value)
+      } catch {
+        return null
+      }
+    }
+
+    return value
+  }
+
+  const redisUrl = await getRedisUrlClient()
+
+  if (redisUrl) {
+    const value = await redisUrl.get(sessionKey(sessionId))
+
+    if (!value || typeof value !== 'string') {
+      return null
+    }
+
+    try {
+      return JSON.parse(value)
+    } catch {
+      return null
+    }
   }
 
   return getLocalSessions().get(sessionId) || null
@@ -221,7 +281,14 @@ async function writeToStore(sessionId, record) {
   const redis = getRedisClient()
 
   if (redis) {
-    await redis.set(sessionKey(sessionId), record, { ex: SESSION_TTL_SECONDS })
+    await redis.set(sessionKey(sessionId), JSON.stringify(record), { ex: SESSION_TTL_SECONDS })
+    return
+  }
+
+  const redisUrl = await getRedisUrlClient()
+
+  if (redisUrl) {
+    await redisUrl.setEx(sessionKey(sessionId), SESSION_TTL_SECONDS, JSON.stringify(record))
     return
   }
 
@@ -233,6 +300,13 @@ async function removeFromStore(sessionId) {
 
   if (redis) {
     await redis.del(sessionKey(sessionId))
+    return
+  }
+
+  const redisUrl = await getRedisUrlClient()
+
+  if (redisUrl) {
+    await redisUrl.del(sessionKey(sessionId))
     return
   }
 
@@ -372,6 +446,13 @@ function allowWriteForSession(sessionId) {
 }
 
 export function parseJsonBody(req) {
+  const contentLengthRaw = req.headers?.['content-length']
+  const contentLength = Number(Array.isArray(contentLengthRaw) ? contentLengthRaw[0] : contentLengthRaw)
+
+  if (Number.isFinite(contentLength) && contentLength > MAX_STATE_BYTES * 2) {
+    return null
+  }
+
   if (req.body && typeof req.body === 'object') {
     return req.body
   }
