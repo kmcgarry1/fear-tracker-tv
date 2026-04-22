@@ -6,7 +6,16 @@ import {
   updateSessionState,
 } from '../_sessionStore.js'
 
+function setSecurityHeaders(res) {
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Pragma', 'no-cache')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+}
+
 export default async function handler(req, res) {
+  setSecurityHeaders(res)
+
   if (req.method === 'GET') {
     const sessionId = typeof req.query.session === 'string' ? req.query.session.trim() : ''
 

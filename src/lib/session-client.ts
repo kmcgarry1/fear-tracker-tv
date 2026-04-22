@@ -36,7 +36,22 @@ export function createSessionClient(options: SessionClientOptions) {
       return '/api'
     }
 
-    return trimmed.replace(/\/$/, '')
+    if (trimmed.startsWith('/')) {
+      return trimmed.startsWith('/api') ? trimmed.replace(/\/$/, '') : '/api'
+    }
+
+    try {
+      const parsed = new URL(trimmed)
+
+      if (parsed.origin !== window.location.origin) {
+        return '/api'
+      }
+
+      const normalizedPath = parsed.pathname.replace(/\/$/, '')
+      return normalizedPath.startsWith('/api') ? normalizedPath : '/api'
+    } catch {
+      return '/api'
+    }
   }
 
   async function parseJsonResponse(response: Response) {

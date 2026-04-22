@@ -5,7 +5,7 @@ const SESSION_TTL_SECONDS = 60 * 60 * 12
 const MAX_STATE_BYTES = 24 * 1024
 const MAX_UPDATES_PER_WINDOW = 18
 const RATE_WINDOW_MS = 10_000
-const SESSION_ID_PATTERN = /^fear-[a-f0-9]{8,24}$/
+const SESSION_ID_PATTERN = /^fear-[a-f0-9]{16,48}$/
 const WRITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{24,160}$/
 const MAX_URL_LENGTH = 600
 
@@ -372,6 +372,13 @@ function allowWriteForSession(sessionId) {
 }
 
 export function parseJsonBody(req) {
+  const contentLengthRaw = req.headers?.['content-length']
+  const contentLength = Number(Array.isArray(contentLengthRaw) ? contentLengthRaw[0] : contentLengthRaw)
+
+  if (Number.isFinite(contentLength) && contentLength > MAX_STATE_BYTES * 2) {
+    return null
+  }
+
   if (req.body && typeof req.body === 'object') {
     return req.body
   }

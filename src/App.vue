@@ -21,8 +21,7 @@ const pageUrl = new URL(window.location.href)
 const viewMode = pageUrl.searchParams.get('mode') === 'controller' ? 'controller' : 'display'
 const defaultSessionId = pageUrl.searchParams.get('session')?.trim() || createSessionId()
 const defaultSyncServerUrl =
-  pageUrl.searchParams.get('sync')?.trim() ||
-  '/api'
+  normalizeApiBaseInput(pageUrl.searchParams.get('sync')?.trim() || '/api')
 const initialControllerToken = normalizeToken(pageUrl.searchParams.get('token') || '')
 const defaultState = createDefaultTrackerState(defaultSyncServerUrl, defaultSessionId)
 const state = reactive(loadInitialState())
@@ -140,6 +139,17 @@ const controllerLink = computed(() => buildLinkedUrl('controller'))
 watch([displayLink, controllerLink], () => {
   void refreshQrCodes()
 })
+
+watch(
+  () => state.syncServerUrl,
+  (nextValue) => {
+    const normalized = normalizeApiBaseInput(nextValue)
+
+    if (normalized !== nextValue) {
+      state.syncServerUrl = normalized
+    }
+  },
+)
 
 watch(
   () => [state.sessionId, state.syncServerUrl, sessionWriteToken.value] as const,
@@ -260,6 +270,31 @@ function normalizeToken(token: string) {
   return /^[A-Za-z0-9_-]{24,160}$/.test(token) ? token : ''
 }
 
+function normalizeApiBaseInput(value: string) {
+  const trimmed = value.trim()
+
+  if (!trimmed) {
+    return '/api'
+  }
+
+  if (trimmed.startsWith('/')) {
+    return trimmed.startsWith('/api') ? trimmed.replace(/\/$/, '') : '/api'
+  }
+
+  try {
+    const parsed = new URL(trimmed)
+
+    if (parsed.origin !== window.location.origin) {
+      return '/api'
+    }
+
+    const normalizedPath = parsed.pathname.replace(/\/$/, '')
+    return normalizedPath.startsWith('/api') ? normalizedPath : '/api'
+  } catch {
+    return '/api'
+  }
+}
+
 function secureHex(bytes: number) {
   const data = new Uint8Array(bytes)
   crypto.getRandomValues(data)
@@ -276,7 +311,7 @@ function secureBase64Url(bytes: number) {
 function buildLinkedUrl(mode: 'display' | 'controller') {
   const linkedUrl = new URL(window.location.href)
   linkedUrl.searchParams.set('session', state.sessionId)
-  linkedUrl.searchParams.set('sync', state.syncServerUrl)
+  linkedUrl.searchParams.set('sync', normalizeApiBaseInput(state.syncServerUrl))
 
   if (mode === 'controller') {
     linkedUrl.searchParams.set('mode', 'controller')
