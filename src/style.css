@@ -151,7 +151,9 @@ button {
 
 .display-stage {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   place-items: center;
+  gap: clamp(1rem, 2vw, 2rem);
   padding: 4vw;
 }
 
@@ -187,6 +189,14 @@ button {
 .fear-high .tracker-aura {
   filter: blur(42px);
   opacity: 0.92;
+}
+
+.tracker.pulse-raise .tracker-aura {
+  animation: fear-raise-pulse 0.9s ease-out;
+}
+
+.tracker.pulse-lower .tracker-aura {
+  animation: fear-lower-pulse 0.9s ease-out;
 }
 
 .tracker::before,
@@ -246,6 +256,118 @@ button {
 
 .fear-high .tracker-value {
   animation: glitch-flare 1.8s ease-in-out infinite;
+}
+
+.countdown-board {
+  position: relative;
+  z-index: 2;
+  width: min(86rem, 100%);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.8rem;
+  animation: countdown-board-float 23s ease-in-out infinite;
+}
+
+.countdown-card {
+  position: relative;
+  display: grid;
+  gap: 0.55rem;
+  min-height: 9rem;
+  padding: 0.9rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--theme-background) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-ring) 50%, transparent);
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--theme-shadow) 36%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--theme-background-accent) 36%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.countdown-card::before {
+  content: '';
+  position: absolute;
+  inset: -30% 22% 42%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--theme-glow) 26%, transparent), transparent 68%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.countdown-card.complete {
+  border-color: color-mix(in srgb, var(--theme-glow) 70%, transparent);
+}
+
+.countdown-card.pulse-advance {
+  animation: countdown-advance-pulse 0.85s ease-out;
+}
+
+.countdown-card.pulse-complete {
+  animation: countdown-complete-pulse 0.9s ease-out;
+}
+
+.countdown-standard {
+  border-color: color-mix(in srgb, var(--theme-ring) 50%, transparent);
+}
+
+.countdown-progress {
+  border-color: color-mix(in srgb, #7cffab 40%, var(--theme-ring));
+}
+
+.countdown-consequence {
+  border-color: color-mix(in srgb, #ff756f 44%, var(--theme-ring));
+}
+
+.countdown-card-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--theme-text) 76%, transparent);
+}
+
+.countdown-card h2 {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-family: var(--tracker-font);
+  font-size: clamp(1.15rem, 2.4vw, 1.8rem);
+  line-height: 1.05;
+}
+
+.countdown-value {
+  color: var(--theme-glow);
+}
+
+.countdown-pips {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0.5rem, 1fr));
+  gap: 0.28rem;
+}
+
+.countdown-pip {
+  height: 0.38rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-text) 20%, transparent);
+}
+
+.countdown-pip.filled {
+  background: color-mix(in srgb, var(--theme-glow) 78%, var(--theme-accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--theme-shadow) 64%, transparent);
+}
+
+.countdown-effect {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: color-mix(in srgb, var(--theme-text) 84%, transparent);
+  font-size: 0.95rem;
+  line-height: 1.35;
 }
 
 .controller-stage {
@@ -485,6 +607,13 @@ button {
   border-color: color-mix(in srgb, var(--theme-glow) 54%, transparent);
 }
 
+.soft-button:disabled,
+.control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
 .soft-button.emphasis,
 .control-button.emphasis,
 .soft-button.active {
@@ -492,10 +621,41 @@ button {
   border-color: color-mix(in srgb, var(--theme-glow) 40%, transparent);
 }
 
+.soft-button.danger {
+  border-color: color-mix(in srgb, #ff6d6d 42%, transparent);
+  color: color-mix(in srgb, #ffd7d7 86%, var(--theme-text));
+}
+
 .fear-icon-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.roll-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.countdown-editor-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.countdown-editor {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--theme-background) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-ring) 34%, transparent);
+}
+
+.countdown-number-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
 }
 
 .slot-card {
@@ -536,6 +696,85 @@ button {
   }
   50% {
     filter: drop-shadow(0 0 28px color-mix(in srgb, var(--theme-shadow) 38%, transparent));
+  }
+}
+
+@keyframes fear-raise-pulse {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.96);
+    filter: blur(24px);
+  }
+  48% {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: blur(46px) saturate(1.28);
+  }
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+    filter: blur(28px);
+  }
+}
+
+@keyframes fear-lower-pulse {
+  0% {
+    opacity: 0.88;
+    transform: scale(1.1);
+    filter: blur(42px) hue-rotate(160deg);
+  }
+  58% {
+    opacity: 0.5;
+    transform: scale(0.82);
+    filter: blur(18px) hue-rotate(190deg);
+  }
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+    filter: blur(28px);
+  }
+}
+
+@keyframes countdown-board-float {
+  0%,
+  100% {
+    transform: translate3d(0.5vw, 0, 0);
+  }
+  50% {
+    transform: translate3d(-0.45vw, -0.35vh, 0);
+  }
+}
+
+@keyframes countdown-advance-pulse {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow:
+      0 0 32px color-mix(in srgb, var(--theme-shadow) 36%, transparent),
+      inset 0 0 28px color-mix(in srgb, var(--theme-background-accent) 36%, transparent);
+  }
+  42% {
+    transform: translateY(-0.2rem) scale(1.025);
+    box-shadow:
+      0 0 42px color-mix(in srgb, var(--theme-glow) 34%, transparent),
+      inset 0 0 36px color-mix(in srgb, var(--theme-accent) 22%, transparent);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes countdown-complete-pulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  36% {
+    transform: scale(1.04);
+    filter: brightness(1.24) saturate(1.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
   }
 }
 
@@ -591,6 +830,14 @@ button {
 
   .tracker {
     width: min(88vw, 76vh);
+  }
+
+  .countdown-board {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+
+  .countdown-card {
+    min-height: 8rem;
   }
 
   .tracker-value {
@@ -703,7 +950,20 @@ button {
 
   .fear-icon-grid,
   .color-grid,
+  .countdown-number-grid,
+  .roll-outcome-grid,
   .qr-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }

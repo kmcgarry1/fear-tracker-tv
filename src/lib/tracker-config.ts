@@ -1,4 +1,15 @@
 export type BackgroundMode = 'none' | 'youtube' | 'images'
+export type CountdownKind = 'standard' | 'progress' | 'consequence'
+export type RollOutcome = 'critical' | 'success-hope' | 'success-fear' | 'failure-hope' | 'failure-fear'
+
+export interface Countdown {
+  id: string
+  name: string
+  kind: CountdownKind
+  value: number
+  max: number
+  effect?: string
+}
 
 export interface ThemeColors {
   background: string
@@ -41,6 +52,7 @@ export interface TrackerState {
   youtubeUrl: string
   imageUrls: string[]
   activeImageIndex: number
+  countdowns: Countdown[]
   sessionId: string
   syncServerUrl: string
 }
@@ -153,6 +165,18 @@ export const THEME_PRESETS: ThemePreset[] = [
 
 export const DEFAULT_MAX_FEAR = 12
 export const DEFAULT_ICON = ICON_OPTIONS[0].icon
+export const MAX_COUNTDOWNS = 6
+export const MAX_COUNTDOWN_VALUE = 20
+export const COUNTDOWN_NAME_MAX_LENGTH = 48
+export const COUNTDOWN_EFFECT_MAX_LENGTH = 120
+
+export const ROLL_OUTCOME_OPTIONS: Array<{ id: RollOutcome; label: string }> = [
+  { id: 'critical', label: 'Critical' },
+  { id: 'success-hope', label: 'Success with Hope' },
+  { id: 'success-fear', label: 'Success with Fear' },
+  { id: 'failure-hope', label: 'Failure with Hope' },
+  { id: 'failure-fear', label: 'Failure with Fear' },
+]
 
 export function createDefaultTrackerState(syncServerUrl: string, sessionId: string): TrackerState {
   const preset = THEME_PRESETS[0]
@@ -169,6 +193,7 @@ export function createDefaultTrackerState(syncServerUrl: string, sessionId: stri
     youtubeUrl: '',
     imageUrls: [],
     activeImageIndex: 0,
+    countdowns: [],
     sessionId,
     syncServerUrl,
   }
@@ -176,6 +201,76 @@ export function createDefaultTrackerState(syncServerUrl: string, sessionId: stri
 
 export function clampFear(fear: number, maxFear: number): number {
   return Math.max(0, Math.min(Math.round(fear), Math.max(0, Math.round(maxFear))))
+}
+
+export function clampCountdownValue(value: number, max: number): number {
+  const normalizedMax = clampCountdownMax(max)
+  const rounded = Number.isFinite(value) ? Math.round(value) : normalizedMax
+  return Math.max(0, Math.min(rounded, normalizedMax))
+}
+
+export function clampCountdownMax(value: number): number {
+  return Math.max(1, Math.min(Math.round(value), MAX_COUNTDOWN_VALUE))
+}
+
+export function getCountdownAdvance(kind: CountdownKind, outcome: RollOutcome): number {
+  if (kind === 'standard') {
+    return 1
+  }
+
+  if (kind === 'progress') {
+    switch (outcome) {
+      case 'critical':
+        return 3
+      case 'success-hope':
+        return 2
+      case 'success-fear':
+        return 1
+      default:
+        return 0
+    }
+  }
+
+  switch (outcome) {
+    case 'failure-fear':
+      return 3
+    case 'failure-hope':
+      return 2
+    case 'success-fear':
+      return 1
+    default:
+      return 0
+  }
+}
+
+export function normalizeCountdowns(value: unknown): Countdown[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.slice(0, MAX_COUNTDOWNS).map((entry, index) => {
+    const input = entry && typeof entry === 'object' ? (entry as Partial<Countdown>) : {}
+    const max = clampCountdownMax(Number(input.max) || 1)
+    const name = sanitizeText(input.name, `Countdown ${index + 1}`, COUNTDOWN_NAME_MAX_LENGTH)
+    const effect = sanitizeText(input.effect, '', COUNTDOWN_EFFECT_MAX_LENGTH)
+
+    return {
+      id: sanitizeText(input.id, `countdown-${index + 1}`, 80),
+      name,
+      kind: normalizeCountdownKind(input.kind),
+      value: clampCountdownValue(Number(input.value), max),
+      max,
+      ...(effect ? { effect } : {}),
+    }
+  })
+}
+
+function normalizeCountdownKind(value: unknown): CountdownKind {
+  return value === 'progress' || value === 'consequence' || value === 'standard' ? value : 'standard'
+}
+
+function sanitizeText(value: unknown, fallback: string, maxLength: number): string {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, maxLength) : fallback
 }
 
 export function normalizeTrackerState(
@@ -189,6 +284,7 @@ export function normalizeTrackerState(
   const imageUrls = Array.isArray(input?.imageUrls)
     ? input.imageUrls.map((value) => value.trim()).filter(Boolean)
     : defaults.imageUrls
+  const countdowns = normalizeCountdowns(input?.countdowns)
 
   return {
     fear: clampFear(input?.fear ?? defaults.fear, maxFear),
@@ -219,6 +315,7 @@ export function normalizeTrackerState(
     youtubeUrl: typeof input?.youtubeUrl === 'string' ? input.youtubeUrl : defaults.youtubeUrl,
     imageUrls,
     activeImageIndex: imageUrls.length === 0 ? 0 : clampFear(input?.activeImageIndex ?? defaults.activeImageIndex, imageUrls.length - 1),
+    countdowns,
     sessionId: typeof input?.sessionId === 'string' && input.sessionId ? input.sessionId : defaults.sessionId,
     syncServerUrl:
       typeof input?.syncServerUrl === 'string' && input.syncServerUrl

@@ -16,14 +16,23 @@ import {
 } from './lib/session-links'
 import {
   FONT_OPTIONS,
+  MAX_COUNTDOWNS,
   THEME_PRESETS,
+  clampCountdownMax,
+  clampCountdownValue,
   clampFear,
   createDefaultTrackerState,
+  getCountdownAdvance,
   normalizeTrackerState,
   type BackgroundMode,
+  type Countdown,
+  type RollOutcome,
   type ThemeColors,
   type TrackerState,
 } from './lib/tracker-config'
+
+type FearPulse = 'raise' | 'lower' | ''
+type CountdownPulse = 'advance' | 'complete'
 
 const STORAGE_KEY = 'daggerheart-fear-tracker-state-v1'
 const MAX_SYNC_IMAGE_URLS = 8
@@ -43,11 +52,15 @@ const connectionStatus = ref<SessionStatus>('disconnected')
 const canWrite = ref(false)
 const copyNotice = ref('')
 const castNotice = ref('')
+const fearPulse = ref<FearPulse>('')
+const countdownPulses = reactive<Record<string, CountdownPulse>>({})
 
 let hideInterfaceTimer = 0
 let copyNoticeTimer = 0
 let castNoticeTimer = 0
 let imageRotationTimer = 0
+let fearPulseTimer = 0
+const countdownPulseTimers = new Map<string, number>()
 let applyingRemoteState = false
 
 const sessionClient = createSessionClient({
@@ -207,6 +220,17 @@ watch(
   },
 )
 
+watch(
+  () => state.fear,
+  (nextFear, previousFear) => {
+    if (nextFear > previousFear) {
+      triggerFearPulse('raise')
+    } else if (nextFear < previousFear) {
+      triggerFearPulse('lower')
+    }
+  },
+)
+
 onMounted(() => {
   sessionClient.connect()
   window.addEventListener('mousemove', revealInterface, { passive: true })
@@ -231,6 +255,10 @@ onBeforeUnmount(() => {
   window.clearTimeout(hideInterfaceTimer)
   window.clearTimeout(copyNoticeTimer)
   window.clearTimeout(castNoticeTimer)
+  window.clearTimeout(fearPulseTimer)
+  for (const timer of countdownPulseTimers.values()) {
+    window.clearTimeout(timer)
+  }
   window.clearInterval(imageRotationTimer)
 })
 
@@ -431,6 +459,151 @@ function updateColor(key: keyof ThemeColors, value: string) {
 function updateImageUrlsText(value: string) {
   imageUrlsText.value = value
 }
+
+function addCountdown() {
+  if (state.countdowns.length >= MAX_COUNTDOWNS) {
+    return
+  }
+
+  state.countdowns = [
+    ...state.countdowns,
+    {
+      id: createCountdownId(),
+      name: `Countdown ${state.countdowns.length + 1}`,
+      kind: 'standard',
+      value: 4,
+      max: 4,
+    },
+  ]
+}
+
+function updateCountdown(id: string, patch: Partial<Countdown>) {
+  state.countdowns = state.countdowns.map((countdown) => {
+    if (countdown.id !== id) {
+      return countdown
+    }
+
+    const nextMax = patch.max === undefined ? countdown.max : clampCountdownMax(Number(patch.max))
+    const nextValue =
+      patch.value === undefined ? clampCountdownValue(countdown.value, nextMax) : clampCountdownValue(Number(patch.value), nextMax)
+
+    return {
+      ...countdown,
+      ...patch,
+      max: nextMax,
+      value: nextValue,
+      effect: patch.effect?.trim() || patch.effect === '' ? patch.effect.trim() : countdown.effect,
+    }
+  })
+}
+
+function deleteCountdown(id: string) {
+  state.countdowns = state.countdowns.filter((countdown) => countdown.id !== id)
+}
+
+function tickCountdown(id: string, amount: number) {
+  const target = state.countdowns.find((countdown) => countdown.id === id)
+  const nextValue = target ? clampCountdownValue(target.value - amount, target.max) : 0
+
+  state.countdowns = state.countdowns.map((countdown) =>
+    countdown.id === id
+      ? {
+          ...countdown,
+          value: nextValue,
+        }
+      : countdown,
+  )
+
+  if (target && amount > 0 && nextValue < target.value) {
+    triggerCountdownPulse(id, nextValue === 0 ? 'complete' : 'advance')
+  }
+}
+
+function resetCountdown(id: string) {
+  state.countdowns = state.countdowns.map((countdown) =>
+    countdown.id === id
+      ? {
+          ...countdown,
+          value: countdown.max,
+        }
+      : countdown,
+  )
+}
+
+function completeCountdown(id: string) {
+  const target = state.countdowns.find((countdown) => countdown.id === id)
+
+  state.countdowns = state.countdowns.map((countdown) =>
+    countdown.id === id
+      ? {
+          ...countdown,
+          value: 0,
+        }
+      : countdown,
+  )
+
+  if (target && target.value > 0) {
+    triggerCountdownPulse(id, 'complete')
+  }
+}
+
+function applyRollOutcome(outcome: RollOutcome) {
+  const pulses: Array<{ id: string; kind: CountdownPulse }> = []
+
+  state.countdowns = state.countdowns.map((countdown) => {
+    const advancement = getCountdownAdvance(countdown.kind, outcome)
+    const nextValue = clampCountdownValue(countdown.value - advancement, countdown.max)
+
+    if (nextValue < countdown.value) {
+      pulses.push({
+        id: countdown.id,
+        kind: nextValue === 0 ? 'complete' : 'advance',
+      })
+    }
+
+    return {
+      ...countdown,
+      value: nextValue,
+    }
+  })
+
+  for (const pulse of pulses) {
+    triggerCountdownPulse(pulse.id, pulse.kind)
+  }
+}
+
+function createCountdownId() {
+  return `countdown-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function triggerFearPulse(kind: Exclude<FearPulse, ''>) {
+  fearPulse.value = ''
+  window.clearTimeout(fearPulseTimer)
+
+  window.requestAnimationFrame(() => {
+    fearPulse.value = kind
+    fearPulseTimer = window.setTimeout(() => {
+      fearPulse.value = ''
+    }, 900)
+  })
+}
+
+function triggerCountdownPulse(id: string, kind: CountdownPulse) {
+  countdownPulses[id] = kind
+
+  const existingTimer = countdownPulseTimers.get(id)
+  if (existingTimer) {
+    window.clearTimeout(existingTimer)
+  }
+
+  countdownPulseTimers.set(
+    id,
+    window.setTimeout(() => {
+      delete countdownPulses[id]
+      countdownPulseTimers.delete(id)
+    }, 900),
+  )
+}
 </script>
 
 <template>
@@ -468,6 +641,9 @@ function updateImageUrlsText(value: string) {
       v-if="viewMode === 'display'"
       :icon="iconForFear"
       :fear-value-label="fearValueLabel"
+      :countdowns="state.countdowns"
+      :fear-pulse="fearPulse"
+      :countdown-pulses="countdownPulses"
       @increment="incrementFear"
       @decrement="decrementFear"
     />
@@ -518,6 +694,13 @@ function updateImageUrlsText(value: string) {
       @update-youtube-url="state.youtubeUrl = $event"
       @update-image-urls-text="updateImageUrlsText"
       @cycle-background="cycleBackground"
+      @add-countdown="addCountdown"
+      @update-countdown="updateCountdown"
+      @delete-countdown="deleteCountdown"
+      @tick-countdown="tickCountdown"
+      @reset-countdown="resetCountdown"
+      @complete-countdown="completeCountdown"
+      @apply-roll-outcome="applyRollOutcome"
     />
   </div>
 </template>

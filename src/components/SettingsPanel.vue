@@ -2,10 +2,15 @@
 import { computed } from 'vue'
 
 import {
+  MAX_COUNTDOWNS,
   FONT_OPTIONS,
   ICON_OPTIONS,
+  ROLL_OUTCOME_OPTIONS,
   THEME_PRESETS,
   type BackgroundMode,
+  type Countdown,
+  type CountdownKind,
+  type RollOutcome,
   type ThemeColors,
   type TrackerState,
 } from '../lib/tracker-config'
@@ -48,6 +53,13 @@ const emit = defineEmits<{
   'update-youtube-url': [value: string]
   'update-image-urls-text': [value: string]
   'cycle-background': [direction: 1 | -1]
+  'add-countdown': []
+  'update-countdown': [id: string, patch: Partial<Countdown>]
+  'delete-countdown': [id: string]
+  'tick-countdown': [id: string, amount: number]
+  'reset-countdown': [id: string]
+  'complete-countdown': [id: string]
+  'apply-roll-outcome': [outcome: RollOutcome]
 }>()
 
 const fearSlots = computed(() => Array.from({ length: props.state.maxFear + 1 }, (_, index) => index))
@@ -71,6 +83,18 @@ function updateFearIcon(fear: number, event: Event) {
 
 function updateColor(key: keyof ThemeColors, event: Event) {
   emit('update-color', key, getFieldValue(event))
+}
+
+function updateCountdownKind(id: string, event: Event) {
+  emit('update-countdown', id, { kind: getFieldValue(event) as CountdownKind })
+}
+
+function updateCountdownNumber(id: string, field: 'value' | 'max', event: Event) {
+  const value = Number(getFieldValue(event))
+
+  if (Number.isFinite(value)) {
+    emit('update-countdown', id, { [field]: value })
+  }
 }
 </script>
 
@@ -204,6 +228,97 @@ function updateColor(key: keyof ThemeColors, event: Event) {
                 <option v-for="icon in ICON_OPTIONS" :key="`${fear}-${icon.id}`" :value="icon.icon">{{ icon.label }}</option>
               </select>
             </label>
+          </div>
+        </section>
+
+        <section class="settings-section">
+          <div class="section-heading">
+            <h2>Countdowns</h2>
+            <span>{{ state.countdowns.length }}/{{ MAX_COUNTDOWNS }} public stakes</span>
+          </div>
+          <div class="button-row compact">
+            <button
+              type="button"
+              class="soft-button emphasis"
+              :disabled="state.countdowns.length >= MAX_COUNTDOWNS"
+              @click="emit('add-countdown')"
+            >
+              Add countdown
+            </button>
+          </div>
+          <div v-if="state.countdowns.length" class="roll-outcome-grid">
+            <button
+              v-for="outcome in ROLL_OUTCOME_OPTIONS"
+              :key="outcome.id"
+              type="button"
+              class="soft-button"
+              @click="emit('apply-roll-outcome', outcome.id)"
+            >
+              {{ outcome.label }}
+            </button>
+          </div>
+          <p v-else class="inline-note">Add a countdown to show public scene pressure on the TV display.</p>
+
+          <div v-if="state.countdowns.length" class="countdown-editor-list">
+            <article v-for="countdown in state.countdowns" :key="countdown.id" class="countdown-editor">
+              <label class="field-group">
+                <span>Name</span>
+                <input
+                  :value="countdown.name"
+                  type="text"
+                  maxlength="48"
+                  placeholder="Ritual completes"
+                  @input="emit('update-countdown', countdown.id, { name: getFieldValue($event) })"
+                />
+              </label>
+              <label class="field-group">
+                <span>Type</span>
+                <select :value="countdown.kind" @change="updateCountdownKind(countdown.id, $event)">
+                  <option value="standard">Standard</option>
+                  <option value="progress">Progress</option>
+                  <option value="consequence">Consequence</option>
+                </select>
+              </label>
+              <div class="countdown-number-grid">
+                <label class="field-group">
+                  <span>Remaining</span>
+                  <input
+                    :value="countdown.value"
+                    type="number"
+                    min="0"
+                    :max="countdown.max"
+                    @input="updateCountdownNumber(countdown.id, 'value', $event)"
+                  />
+                </label>
+                <label class="field-group">
+                  <span>Starting value</span>
+                  <input
+                    :value="countdown.max"
+                    type="number"
+                    min="1"
+                    max="20"
+                    @input="updateCountdownNumber(countdown.id, 'max', $event)"
+                  />
+                </label>
+              </div>
+              <label class="field-group">
+                <span>Public stakes</span>
+                <textarea
+                  :value="countdown.effect || ''"
+                  rows="2"
+                  maxlength="120"
+                  placeholder="What happens when this reaches zero?"
+                  @input="emit('update-countdown', countdown.id, { effect: getFieldValue($event) })"
+                />
+              </label>
+              <div class="button-row compact">
+                <button type="button" class="soft-button" @click="emit('tick-countdown', countdown.id, 1)">Tick</button>
+                <button type="button" class="soft-button" @click="emit('tick-countdown', countdown.id, -1)">Restore</button>
+                <button type="button" class="soft-button" @click="emit('reset-countdown', countdown.id)">Reset</button>
+                <button type="button" class="soft-button" @click="emit('complete-countdown', countdown.id)">Complete</button>
+                <button type="button" class="soft-button danger" @click="emit('delete-countdown', countdown.id)">Delete</button>
+              </div>
+            </article>
           </div>
         </section>
 
