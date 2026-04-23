@@ -8,6 +8,8 @@ defineProps<{
   icon: string
   fearValueLabel: string
   countdowns: Countdown[]
+  fearPulse: 'raise' | 'lower' | ''
+  countdownPulses: Record<string, 'advance' | 'complete'>
 }>()
 
 const emit = defineEmits<{
@@ -18,11 +20,20 @@ const emit = defineEmits<{
 
 <template>
   <main class="display-stage">
-    <button class="tracker" type="button" @click="emit('increment')" @contextmenu.prevent="emit('decrement')">
+    <button
+      class="tracker"
+      :class="{
+        'pulse-raise': fearPulse === 'raise',
+        'pulse-lower': fearPulse === 'lower',
+      }"
+      type="button"
+      @click="emit('increment')"
+      @contextmenu.prevent="emit('decrement')"
+    >
       <span class="tracker-aura" />
       <Icon class="tracker-icon" :icon="icon" />
       <span class="tracker-value">{{ fearValueLabel }}</span>
     </button>
-    <CountdownBoard :countdowns="countdowns" />
+    <CountdownBoard :countdowns="countdowns" :pulses="countdownPulses" />
   </main>
 </template>

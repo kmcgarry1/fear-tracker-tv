@@ -191,6 +191,14 @@ button {
   opacity: 0.92;
 }
 
+.tracker.pulse-raise .tracker-aura {
+  animation: fear-raise-pulse 0.9s ease-out;
+}
+
+.tracker.pulse-lower .tracker-aura {
+  animation: fear-lower-pulse 0.9s ease-out;
+}
+
 .tracker::before,
 .tracker::after {
   content: '';
@@ -287,6 +295,26 @@ button {
 
 .countdown-card.complete {
   border-color: color-mix(in srgb, var(--theme-glow) 70%, transparent);
+}
+
+.countdown-card.pulse-advance {
+  animation: countdown-advance-pulse 0.85s ease-out;
+}
+
+.countdown-card.pulse-complete {
+  animation: countdown-complete-pulse 0.9s ease-out;
+}
+
+.countdown-standard {
+  border-color: color-mix(in srgb, var(--theme-ring) 50%, transparent);
+}
+
+.countdown-progress {
+  border-color: color-mix(in srgb, #7cffab 40%, var(--theme-ring));
+}
+
+.countdown-consequence {
+  border-color: color-mix(in srgb, #ff756f 44%, var(--theme-ring));
 }
 
 .countdown-card-header {
@@ -579,6 +607,13 @@ button {
   border-color: color-mix(in srgb, var(--theme-glow) 54%, transparent);
 }
 
+.soft-button:disabled,
+.control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
 .soft-button.emphasis,
 .control-button.emphasis,
 .soft-button.active {
@@ -664,6 +699,42 @@ button {
   }
 }
 
+@keyframes fear-raise-pulse {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.96);
+    filter: blur(24px);
+  }
+  48% {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: blur(46px) saturate(1.28);
+  }
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+    filter: blur(28px);
+  }
+}
+
+@keyframes fear-lower-pulse {
+  0% {
+    opacity: 0.88;
+    transform: scale(1.1);
+    filter: blur(42px) hue-rotate(160deg);
+  }
+  58% {
+    opacity: 0.5;
+    transform: scale(0.82);
+    filter: blur(18px) hue-rotate(190deg);
+  }
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+    filter: blur(28px);
+  }
+}
+
 @keyframes countdown-board-float {
   0%,
   100% {
@@ -671,6 +742,39 @@ button {
   }
   50% {
     transform: translate3d(-0.45vw, -0.35vh, 0);
+  }
+}
+
+@keyframes countdown-advance-pulse {
+  0% {
+    transform: translateY(0) scale(1);
+    box-shadow:
+      0 0 32px color-mix(in srgb, var(--theme-shadow) 36%, transparent),
+      inset 0 0 28px color-mix(in srgb, var(--theme-background-accent) 36%, transparent);
+  }
+  42% {
+    transform: translateY(-0.2rem) scale(1.025);
+    box-shadow:
+      0 0 42px color-mix(in srgb, var(--theme-glow) 34%, transparent),
+      inset 0 0 36px color-mix(in srgb, var(--theme-accent) 22%, transparent);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes countdown-complete-pulse {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  36% {
+    transform: scale(1.04);
+    filter: brightness(1.24) saturate(1.2);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
   }
 }
 
@@ -730,6 +834,10 @@ button {
 
   .countdown-board {
     grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  }
+
+  .countdown-card {
+    min-height: 8rem;
   }
 
   .tracker-value {
@@ -846,5 +954,16 @@ button {
   .roll-outcome-grid,
   .qr-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.001ms !important;
   }
 }

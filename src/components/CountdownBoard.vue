@@ -3,6 +3,7 @@ import type { Countdown } from '../lib/tracker-config'
 
 defineProps<{
   countdowns: Countdown[]
+  pulses: Record<string, 'advance' | 'complete'>
 }>()
 
 function pipRange(max: number) {
@@ -16,7 +17,11 @@ function pipRange(max: number) {
       v-for="countdown in countdowns"
       :key="countdown.id"
       class="countdown-card"
-      :class="[`countdown-${countdown.kind}`, { complete: countdown.value === 0 }]"
+      :class="[
+        `countdown-${countdown.kind}`,
+        pulses[countdown.id] ? `pulse-${pulses[countdown.id]}` : '',
+        { complete: countdown.value === 0 },
+      ]"
     >
       <div class="countdown-card-header">
         <span class="countdown-kind">{{ countdown.kind }}</span>
