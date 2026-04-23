@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
-import QRCode from 'qrcode'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 
+import ControllerStage from './components/ControllerStage.vue'
+import DisplayStage from './components/DisplayStage.vue'
+import SettingsPanel from './components/SettingsPanel.vue'
+import { useLinkQrCodes } from './composables/useLinkQrCodes'
+import { buildYoutubeEmbedUrl, isSafeHttpUrl } from './lib/media-utils'
 import { createSessionClient, type SessionStatus } from './lib/session-client'
 import {
+  buildLinkedUrl,
+  createControllerToken,
+  normalizeApiBaseInput,
+  resolveInitialSessionParams,
+} from './lib/session-links'
+import {
   FONT_OPTIONS,
-  ICON_OPTIONS,
   THEME_PRESETS,
   clampFear,
   createDefaultTrackerState,
@@ -17,15 +26,16 @@ import {
 } from './lib/tracker-config'
 
 const STORAGE_KEY = 'daggerheart-fear-tracker-state-v1'
-const pageUrl = new URL(window.location.href)
-const viewMode = pageUrl.searchParams.get('mode') === 'controller' ? 'controller' : 'display'
-const defaultSessionId = pageUrl.searchParams.get('session')?.trim() || createSessionId()
-const defaultSyncServerUrl =
-  normalizeApiBaseInput(pageUrl.searchParams.get('sync')?.trim() || '/api')
-const initialControllerToken = normalizeToken(pageUrl.searchParams.get('token') || '')
-const defaultState = createDefaultTrackerState(defaultSyncServerUrl, defaultSessionId)
+const MAX_SYNC_IMAGE_URLS = 8
+const MAX_SYNC_URL_LENGTH = 320
+
+const initialSession = resolveInitialSessionParams(window.location.href)
+const viewMode = initialSession.viewMode
+const defaultState = createDefaultTrackerState(initialSession.syncServerUrl, initialSession.sessionId)
 const state = reactive(loadInitialState())
-const sessionWriteToken = ref(initialControllerToken)
+const sessionWriteToken = ref(
+  initialSession.controllerToken || (viewMode === 'controller' ? createControllerToken() : ''),
+)
 const settingsOpen = ref(viewMode === 'controller')
 const interfaceVisible = ref(viewMode === 'controller')
 const tabActive = ref(!document.hidden)
@@ -33,10 +43,6 @@ const connectionStatus = ref<SessionStatus>('disconnected')
 const canWrite = ref(false)
 const copyNotice = ref('')
 const castNotice = ref('')
-const displayQrDataUrl = ref('')
-const controllerQrDataUrl = ref('')
-const MAX_SYNC_IMAGE_URLS = 8
-const MAX_SYNC_URL_LENGTH = 320
 
 let hideInterfaceTimer = 0
 let copyNoticeTimer = 0
@@ -112,10 +118,9 @@ const imageUrlsText = computed({
   get: () => state.imageUrls.join('\n'),
   set: (value: string) => {
     state.imageUrls = value
-      .split(/\r?\n|,/) 
+      .split(/\r?\n|,/)
       .map((entry) => entry.trim().slice(0, MAX_SYNC_URL_LENGTH))
       .filter((entry) => isSafeHttpUrl(entry))
-      .filter(Boolean)
       .slice(0, MAX_SYNC_IMAGE_URLS)
 
     if (state.activeImageIndex >= state.imageUrls.length) {
@@ -137,12 +142,13 @@ const syncLabel = computed(() => {
       return 'local only'
   }
 })
-const displayLink = computed(() => buildLinkedUrl('display'))
-const controllerLink = computed(() => buildLinkedUrl('controller'))
-
-watch([displayLink, controllerLink], () => {
-  void refreshQrCodes()
-})
+const displayLink = computed(() =>
+  buildLinkedUrl(window.location.href, 'display', state.sessionId, state.syncServerUrl, sessionWriteToken.value),
+)
+const controllerLink = computed(() =>
+  buildLinkedUrl(window.location.href, 'controller', state.sessionId, state.syncServerUrl, sessionWriteToken.value),
+)
+const { displayQrDataUrl, controllerQrDataUrl } = useLinkQrCodes(displayLink, controllerLink)
 
 watch(
   () => state.syncServerUrl,
@@ -202,12 +208,7 @@ watch(
 )
 
 onMounted(() => {
-  if (viewMode === 'controller' && !sessionWriteToken.value) {
-    sessionWriteToken.value = createControllerToken()
-  }
-
   sessionClient.connect()
-  void refreshQrCodes()
   window.addEventListener('mousemove', revealInterface, { passive: true })
   window.addEventListener('pointerdown', revealInterface, { passive: true })
   window.addEventListener('touchstart', revealInterface, { passive: true })
@@ -244,8 +245,8 @@ function loadInitialState(): TrackerState {
     return normalizeTrackerState(
       {
         ...(JSON.parse(savedState) as Partial<TrackerState>),
-        sessionId: defaultSessionId,
-        syncServerUrl: defaultSyncServerUrl,
+        sessionId: initialSession.sessionId,
+        syncServerUrl: initialSession.syncServerUrl,
       },
       defaultState,
     )
@@ -260,137 +261,6 @@ function snapshotState(): TrackerState {
 
 function persistState() {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshotState()))
-}
-
-function createSessionId() {
-  return `fear-${secureHex(8)}`
-}
-
-function createControllerToken() {
-  return secureBase64Url(24)
-}
-
-function normalizeToken(token: string) {
-  return /^[A-Za-z0-9_-]{24,160}$/.test(token) ? token : ''
-}
-
-function normalizeApiBaseInput(value: string) {
-  const trimmed = value.trim()
-
-  if (!trimmed) {
-    return '/api'
-  }
-
-  if (trimmed.startsWith('/')) {
-    return trimmed.startsWith('/api') ? trimmed.replace(/\/$/, '') : '/api'
-  }
-
-  try {
-    const parsed = new URL(trimmed)
-
-    if (parsed.origin !== window.location.origin) {
-      return '/api'
-    }
-
-    const normalizedPath = parsed.pathname.replace(/\/$/, '')
-    return normalizedPath.startsWith('/api') ? normalizedPath : '/api'
-  } catch {
-    return '/api'
-  }
-}
-
-function secureHex(bytes: number) {
-  const data = new Uint8Array(bytes)
-  crypto.getRandomValues(data)
-  return Array.from(data, (value) => value.toString(16).padStart(2, '0')).join('')
-}
-
-function secureBase64Url(bytes: number) {
-  const data = new Uint8Array(bytes)
-  crypto.getRandomValues(data)
-  const binary = Array.from(data, (value) => String.fromCharCode(value)).join('')
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
-
-function isSafeHttpUrl(value: string) {
-  if (!value) {
-    return false
-  }
-
-  try {
-    const parsed = new URL(value)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
-
-function buildLinkedUrl(mode: 'display' | 'controller') {
-  const linkedUrl = new URL(window.location.href)
-  linkedUrl.searchParams.set('session', state.sessionId)
-  linkedUrl.searchParams.set('sync', normalizeApiBaseInput(state.syncServerUrl))
-
-  if (mode === 'controller') {
-    linkedUrl.searchParams.set('mode', 'controller')
-    if (sessionWriteToken.value) {
-      linkedUrl.searchParams.set('token', sessionWriteToken.value)
-    } else {
-      linkedUrl.searchParams.delete('token')
-    }
-  } else {
-    linkedUrl.searchParams.delete('mode')
-    linkedUrl.searchParams.delete('token')
-  }
-
-  return linkedUrl.toString()
-}
-
-function enableControllerToken() {
-  if (!sessionWriteToken.value) {
-    sessionWriteToken.value = createControllerToken()
-  }
-}
-
-function rotateControllerToken() {
-  sessionWriteToken.value = createControllerToken()
-}
-
-function buildYoutubeEmbedUrl(source: string) {
-  const videoId = extractYoutubeId(source)
-
-  if (!videoId) {
-    return ''
-  }
-
-  return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&loop=1&playlist=${videoId}&modestbranding=1&playsinline=1&rel=0`
-}
-
-function extractYoutubeId(source: string) {
-  if (!source.trim()) {
-    return ''
-  }
-
-  try {
-    const youtubeUrl = new URL(source)
-
-    if (youtubeUrl.hostname.includes('youtu.be')) {
-      return youtubeUrl.pathname.replace('/', '')
-    }
-
-    if (youtubeUrl.searchParams.get('v')) {
-      return youtubeUrl.searchParams.get('v') ?? ''
-    }
-
-    const segments = youtubeUrl.pathname.split('/').filter(Boolean)
-
-    if ((segments[0] === 'shorts' || segments[0] === 'embed') && segments[1]) {
-      return segments[1]
-    }
-  } catch {
-    return source.trim()
-  }
-
-  return source.trim()
 }
 
 function handleKeyboardShortcuts(event: KeyboardEvent) {
@@ -536,29 +406,6 @@ async function launchChromecastFlow() {
   }, 4200)
 }
 
-async function refreshQrCodes() {
-  try {
-    const [displayQr, controllerQr] = await Promise.all([
-      QRCode.toDataURL(displayLink.value, {
-        errorCorrectionLevel: 'M',
-        margin: 1,
-        width: 220,
-      }),
-      QRCode.toDataURL(controllerLink.value, {
-        errorCorrectionLevel: 'M',
-        margin: 1,
-        width: 220,
-      }),
-    ])
-
-    displayQrDataUrl.value = displayQr
-    controllerQrDataUrl.value = controllerQr
-  } catch {
-    displayQrDataUrl.value = ''
-    controllerQrDataUrl.value = ''
-  }
-}
-
 function setBackgroundMode(mode: BackgroundMode) {
   state.backgroundMode = mode
 }
@@ -574,18 +421,6 @@ function cycleBackground(direction: 1 | -1) {
   state.activeImageIndex = ((nextIndex % total) + total) % total
 }
 
-function trackerClick() {
-  if (viewMode === 'display') {
-    incrementFear()
-  }
-}
-
-function trackerContextMenu() {
-  if (viewMode === 'display') {
-    decrementFear()
-  }
-}
-
 function updateColor(key: keyof ThemeColors, value: string) {
   state.colors = {
     ...state.colors,
@@ -593,28 +428,8 @@ function updateColor(key: keyof ThemeColors, value: string) {
   }
 }
 
-function handleFearIconChange(fear: number, event: Event) {
-  const target = event.target as HTMLSelectElement | null
-
-  if (target) {
-    setFearIcon(fear, target.value)
-  }
-}
-
-function handleThemeSelect(event: Event) {
-  const target = event.target as HTMLSelectElement | null
-
-  if (target) {
-    applyTheme(target.value)
-  }
-}
-
-function handleColorChange(key: keyof ThemeColors, event: Event) {
-  const target = event.target as HTMLInputElement | null
-
-  if (target) {
-    updateColor(key, target.value)
-  }
+function updateImageUrlsText(value: string) {
+  imageUrlsText.value = value
 }
 </script>
 
@@ -649,200 +464,60 @@ function handleColorChange(key: keyof ThemeColors, event: Event) {
       <Icon icon="mdi:cog-outline" />
     </button>
 
-    <main v-if="viewMode === 'display'" class="display-stage">
-      <button class="tracker" type="button" @click="trackerClick" @contextmenu.prevent="trackerContextMenu">
-        <span class="tracker-aura" />
-        <Icon class="tracker-icon" :icon="iconForFear" />
-        <span class="tracker-value">{{ fearValueLabel }}</span>
-      </button>
-    </main>
+    <DisplayStage
+      v-if="viewMode === 'display'"
+      :icon="iconForFear"
+      :fear-value-label="fearValueLabel"
+      @increment="incrementFear"
+      @decrement="decrementFear"
+    />
+    <ControllerStage
+      v-else
+      v-model:fear="state.fear"
+      :icon="iconForFear"
+      :fear-value-label="fearValueLabel"
+      :session-id="state.sessionId"
+      :sync-label="syncLabel"
+      :max-fear="state.maxFear"
+      :can-write="canWrite"
+      @decrement="decrementFear"
+      @increment="incrementFear"
+    />
 
-    <main v-else class="controller-stage">
-      <section class="controller-hero">
-        <div class="controller-preview">
-          <Icon class="controller-icon" :icon="iconForFear" />
-          <span class="controller-value">{{ fearValueLabel }}</span>
-          <span class="controller-status">Session {{ state.sessionId }} · {{ syncLabel }}</span>
-        </div>
-        <div class="controller-actions">
-          <button type="button" class="control-button" :disabled="!canWrite" @click="decrementFear">-1 Fear</button>
-          <button type="button" class="control-button emphasis" :disabled="!canWrite" @click="incrementFear">+1 Fear</button>
-        </div>
-        <label class="field-group">
-          <span>Fear value</span>
-          <input v-model.number="state.fear" type="range" min="0" :max="state.maxFear" :disabled="!canWrite" />
-        </label>
-      </section>
-    </main>
-
-    <aside class="settings-panel" :class="{ open: settingsOpen || viewMode === 'controller' }">
-      <div class="settings-scroll">
-        <section class="settings-section">
-          <div class="section-heading">
-            <h2>Session</h2>
-            <span>{{ syncLabel }}</span>
-          </div>
-          <p class="inline-note">Role: {{ canWrite ? 'controller write access' : 'display read only' }}</p>
-          <label class="field-group">
-            <span>Session code</span>
-            <input v-model.trim="state.sessionId" type="text" maxlength="32" placeholder="fear-a1b2c3d4" />
-          </label>
-          <label class="field-group">
-            <span>Sync API base</span>
-            <input v-model.trim="state.syncServerUrl" type="text" placeholder="/api or https://your-app.vercel.app/api" />
-          </label>
-          <div class="button-row">
-            <button v-if="!sessionWriteToken" type="button" class="soft-button" @click="enableControllerToken">Generate controller token</button>
-            <button v-else type="button" class="soft-button" @click="rotateControllerToken">Rotate controller token</button>
-          </div>
-          <div class="button-row">
-            <button type="button" class="soft-button" @click="copyLink(displayLink, 'Display link')">Copy display link</button>
-            <button type="button" class="soft-button" @click="copyLink(controllerLink, 'Controller link')">Copy controller link</button>
-          </div>
-          <div class="qr-grid">
-            <figure class="qr-card">
-              <img v-if="displayQrDataUrl" :src="displayQrDataUrl" alt="QR code for display link" />
-              <p>Display QR</p>
-            </figure>
-            <figure class="qr-card">
-              <img v-if="controllerQrDataUrl" :src="controllerQrDataUrl" alt="QR code for controller link" />
-              <p>Controller QR</p>
-            </figure>
-          </div>
-          <p v-if="!displayQrDataUrl || !controllerQrDataUrl" class="inline-note">QR generation unavailable. Use copy link buttons.</p>
-          <p class="inline-note">Only controller links include the secure write token.</p>
-          <p v-if="copyNotice" class="inline-note">{{ copyNotice }}</p>
-        </section>
-
-        <section class="settings-section">
-          <div class="section-heading">
-            <h2>Cast to TV</h2>
-            <span>Free options by platform</span>
-          </div>
-          <div class="button-row">
-            <button type="button" class="soft-button emphasis" @click="launchChromecastFlow">Chromecast from Chrome</button>
-          </div>
-          <ul class="quick-list">
-            <li>Chromecast: open the display link in Chrome and use Cast tab or Cast screen.</li>
-            <li>Apple TV: open the display link in Safari on iPhone or iPad and use AirPlay screen mirror.</li>
-            <li>Windows to smart TV: use Windows + K to connect with Miracast then fullscreen browser.</li>
-            <li>Android TV: use Smart View, Cast, or Screen Share from quick settings.</li>
-            <li>Universal fallback: HDMI cable from laptop or tablet to TV.</li>
-          </ul>
-          <p v-if="castNotice" class="inline-note">{{ castNotice }}</p>
-          <p class="inline-note">Use the display link on the casted screen and the controller link on your phone.</p>
-        </section>
-
-        <fieldset class="settings-fieldset" :disabled="!canWrite">
-
-        <section class="settings-section">
-          <div class="section-heading">
-            <h2>Tracker</h2>
-            <span>TV-safe drift stays on automatically</span>
-          </div>
-          <div class="button-row compact">
-            <button type="button" class="soft-button" @click="decrementFear">Lower fear</button>
-            <button type="button" class="soft-button emphasis" @click="incrementFear">Raise fear</button>
-          </div>
-          <label class="field-group">
-            <span>Maximum fear</span>
-            <input v-model.number="state.maxFear" type="number" min="1" max="30" />
-          </label>
-          <label class="field-group">
-            <span>Font</span>
-            <select v-model="state.fontId">
-              <option v-for="font in FONT_OPTIONS" :key="font.id" :value="font.id">{{ font.label }}</option>
-            </select>
-          </label>
-        </section>
-
-        <section class="settings-section">
-          <div class="section-heading">
-            <h2>Icons</h2>
-            <span>Default is a skull, then override per value</span>
-          </div>
-          <label class="field-group">
-            <span>Icon for all fear values</span>
-            <select v-model="state.globalIcon">
-              <option v-for="icon in ICON_OPTIONS" :key="icon.id" :value="icon.icon">{{ icon.label }}</option>
-            </select>
-          </label>
-          <button type="button" class="soft-button" @click="applyGlobalIcon">Apply current icon to every slot</button>
-          <div class="fear-icon-grid">
-            <label v-for="fear in fearSlots" :key="fear" class="slot-card">
-              <span>Fear {{ fear }}</span>
-              <select :value="state.fearIcons[String(fear)] || state.globalIcon" @change="handleFearIconChange(fear, $event)">
-                <option v-for="icon in ICON_OPTIONS" :key="`${fear}-${icon.id}`" :value="icon.icon">{{ icon.label }}</option>
-              </select>
-            </label>
-          </div>
-        </section>
-
-        <section class="settings-section">
-          <div class="section-heading">
-            <h2>Color story</h2>
-            <span>Preset moods inspired by the book without naming them directly</span>
-          </div>
-          <label class="field-group">
-            <span>Preset palette</span>
-            <select :value="state.themeId" @change="handleThemeSelect">
-              <option v-for="theme in THEME_PRESETS" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
-            </select>
-          </label>
-          <div class="color-grid">
-            <label class="field-group color-field">
-              <span>Accent</span>
-              <input :value="state.colors.accent" type="color" @input="handleColorChange('accent', $event)" />
-            </label>
-            <label class="field-group color-field">
-              <span>Glow</span>
-              <input :value="state.colors.glow" type="color" @input="handleColorChange('glow', $event)" />
-            </label>
-            <label class="field-group color-field">
-              <span>Text</span>
-              <input :value="state.colors.text" type="color" @input="handleColorChange('text', $event)" />
-            </label>
-            <label class="field-group color-field">
-              <span>Ring</span>
-              <input :value="state.colors.ring" type="color" @input="handleColorChange('ring', $event)" />
-            </label>
-            <label class="field-group color-field">
-              <span>Backdrop</span>
-              <input :value="state.colors.backgroundAccent" type="color" @input="handleColorChange('backgroundAccent', $event)" />
-            </label>
-            <label class="field-group color-field">
-              <span>Base</span>
-              <input :value="state.colors.background" type="color" @input="handleColorChange('background', $event)" />
-            </label>
-          </div>
-          <button type="button" class="soft-button" @click="resetThemeColors">Reset to current preset</button>
-        </section>
-
-        <section class="settings-section">
-          <div class="section-heading">
-            <h2>Background</h2>
-            <span>Use motion or image cycling to reduce TV burn-in</span>
-          </div>
-          <div class="button-row compact">
-            <button type="button" class="soft-button" :class="{ active: state.backgroundMode === 'none' }" @click="setBackgroundMode('none')">No media</button>
-            <button type="button" class="soft-button" :class="{ active: state.backgroundMode === 'youtube' }" @click="setBackgroundMode('youtube')">YouTube</button>
-            <button type="button" class="soft-button" :class="{ active: state.backgroundMode === 'images' }" @click="setBackgroundMode('images')">Images</button>
-          </div>
-          <label class="field-group">
-            <span>YouTube link</span>
-            <input v-model.trim="state.youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=..." />
-          </label>
-          <label class="field-group">
-            <span>Background image URLs</span>
-            <textarea v-model="imageUrlsText" rows="4" placeholder="One URL per line" />
-          </label>
-          <div class="button-row compact">
-            <button type="button" class="soft-button" @click="cycleBackground(-1)">Previous image</button>
-            <button type="button" class="soft-button" @click="cycleBackground(1)">Next image</button>
-          </div>
-        </section>
-        </fieldset>
-      </div>
-    </aside>
+    <SettingsPanel
+      :open="settingsOpen"
+      :view-mode="viewMode"
+      :state="state"
+      :session-write-token="sessionWriteToken"
+      :sync-label="syncLabel"
+      :can-write="canWrite"
+      :display-link="displayLink"
+      :controller-link="controllerLink"
+      :display-qr-data-url="displayQrDataUrl"
+      :controller-qr-data-url="controllerQrDataUrl"
+      :copy-notice="copyNotice"
+      :cast-notice="castNotice"
+      :image-urls-text="imageUrlsText"
+      @update-session-id="state.sessionId = $event"
+      @update-sync-server-url="state.syncServerUrl = $event"
+      @enable-controller-token="sessionWriteToken = createControllerToken()"
+      @rotate-controller-token="sessionWriteToken = createControllerToken()"
+      @copy-link="copyLink"
+      @launch-chromecast-flow="launchChromecastFlow"
+      @decrement-fear="decrementFear"
+      @increment-fear="incrementFear"
+      @update-max-fear="state.maxFear = $event"
+      @update-font-id="state.fontId = $event"
+      @update-global-icon="state.globalIcon = $event"
+      @apply-global-icon="applyGlobalIcon"
+      @set-fear-icon="setFearIcon"
+      @apply-theme="applyTheme"
+      @update-color="updateColor"
+      @reset-theme-colors="resetThemeColors"
+      @set-background-mode="setBackgroundMode"
+      @update-youtube-url="state.youtubeUrl = $event"
+      @update-image-urls-text="updateImageUrlsText"
+      @cycle-background="cycleBackground"
+    />
   </div>
 </template>

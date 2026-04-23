@@ -1,4 +1,5 @@
 import type { TrackerState } from './tracker-config'
+import { normalizeApiBaseInput } from './session-links'
 
 export type SessionStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
 
@@ -17,7 +18,7 @@ export function createSessionClient(options: SessionClientOptions) {
   let pollTimer: number | undefined
   let disposed = false
   let sessionId = options.sessionId
-  let apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl)
+  let apiBaseUrl = normalizeApiBaseInput(options.apiBaseUrl)
   let writeToken = options.writeToken
   let canWrite = false
   let knownVersion = -1
@@ -26,31 +27,6 @@ export function createSessionClient(options: SessionClientOptions) {
     if (pollTimer !== undefined) {
       window.clearInterval(pollTimer)
       pollTimer = undefined
-    }
-  }
-
-  function normalizeApiBaseUrl(value: string) {
-    const trimmed = value.trim()
-
-    if (!trimmed) {
-      return '/api'
-    }
-
-    if (trimmed.startsWith('/')) {
-      return trimmed.startsWith('/api') ? trimmed.replace(/\/$/, '') : '/api'
-    }
-
-    try {
-      const parsed = new URL(trimmed)
-
-      if (parsed.origin !== window.location.origin) {
-        return '/api'
-      }
-
-      const normalizedPath = parsed.pathname.replace(/\/$/, '')
-      return normalizedPath.startsWith('/api') ? normalizedPath : '/api'
-    } catch {
-      return '/api'
     }
   }
 
@@ -211,7 +187,7 @@ export function createSessionClient(options: SessionClientOptions) {
 
   function updateConnection(nextSessionId: string, nextApiBaseUrl: string, nextWriteToken: string) {
     sessionId = nextSessionId
-    apiBaseUrl = normalizeApiBaseUrl(nextApiBaseUrl)
+    apiBaseUrl = normalizeApiBaseInput(nextApiBaseUrl)
     writeToken = nextWriteToken
     canWrite = false
     knownVersion = -1
