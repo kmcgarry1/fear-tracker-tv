@@ -11,6 +11,10 @@ const SESSION_ID_PATTERN = /^fear-[a-f0-9]{16,48}$/
 const WRITE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{24,160}$/
 const MAX_URL_LENGTH = 320
 const MAX_IMAGE_URLS = 8
+const MAX_COUNTDOWNS = 6
+const MAX_COUNTDOWN_VALUE = 20
+const MAX_COUNTDOWN_NAME_LENGTH = 48
+const MAX_COUNTDOWN_EFFECT_LENGTH = 120
 
 const THEME_COLORS_BY_ID = {
   'ember-court': {
@@ -311,6 +315,35 @@ function sanitizeImageUrls(value) {
     .map((entry) => entry.slice(0, MAX_URL_LENGTH))
 }
 
+function sanitizeCountdownText(value, fallback, maxLength) {
+  return typeof value === 'string' && value.trim() ? value.trim().slice(0, maxLength) : fallback
+}
+
+function sanitizeCountdownKind(value) {
+  return value === 'progress' || value === 'consequence' || value === 'standard' ? value : 'standard'
+}
+
+function sanitizeCountdowns(value) {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.slice(0, MAX_COUNTDOWNS).map((entry, index) => {
+    const input = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry : {}
+    const max = clamp(Math.round(Number(input.max) || 1), 1, MAX_COUNTDOWN_VALUE)
+    const effect = sanitizeCountdownText(input.effect, '', MAX_COUNTDOWN_EFFECT_LENGTH)
+
+    return {
+      id: sanitizeCountdownText(input.id, `countdown-${index + 1}`, 80),
+      name: sanitizeCountdownText(input.name, `Countdown ${index + 1}`, MAX_COUNTDOWN_NAME_LENGTH),
+      kind: sanitizeCountdownKind(input.kind),
+      value: clamp(Math.round(Number(input.value) || 0), 0, max),
+      max,
+      ...(effect ? { effect } : {}),
+    }
+  })
+}
+
 export function isValidSessionId(sessionId) {
   return SESSION_ID_PATTERN.test(sessionId)
 }
@@ -339,6 +372,7 @@ export function sanitizeStatePayload(input) {
   const imageUrls = sanitizeImageUrls(input.imageUrls)
   const activeImageIndex = imageUrls.length === 0 ? 0 : clamp(Math.round(Number(input.activeImageIndex) || 0), 0, imageUrls.length - 1)
   const backgroundMode = input.backgroundMode === 'youtube' || input.backgroundMode === 'images' ? input.backgroundMode : 'none'
+  const countdowns = sanitizeCountdowns(input.countdowns)
 
   return {
     fear,
@@ -352,6 +386,7 @@ export function sanitizeStatePayload(input) {
     youtubeUrl: sanitizeYoutubeUrl(input.youtubeUrl),
     imageUrls,
     activeImageIndex,
+    countdowns,
   }
 }
 
