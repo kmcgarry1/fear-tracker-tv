@@ -47,6 +47,10 @@ button {
   color: var(--theme-text);
 }
 
+.mode-controller {
+  overflow: auto;
+}
+
 .background-stack,
 .youtube-layer,
 .image-layer,
@@ -295,6 +299,11 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+}
+
+.controller-actions .control-button {
+  flex: 1 1 9rem;
+  min-height: 3rem;
 }
 
 .settings-panel {
@@ -574,8 +583,14 @@ button {
 }
 
 @media (max-width: 900px) {
+  .display-stage {
+    min-height: 100svh;
+    padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right))
+      max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
+  }
+
   .tracker {
-    width: min(82vw, 82vh);
+    width: min(88vw, 76vh);
   }
 
   .tracker-value {
@@ -584,6 +599,44 @@ button {
 
   .settings-panel {
     width: 100vw;
+  }
+
+  .mode-controller .display-stage,
+  .mode-controller .controller-stage {
+    min-height: auto;
+  }
+
+  .mode-controller .controller-stage {
+    place-items: stretch;
+    width: 100%;
+    padding: max(1rem, env(safe-area-inset-top)) max(0.9rem, env(safe-area-inset-right)) 0
+      max(0.9rem, env(safe-area-inset-left));
+  }
+
+  .mode-controller .controller-hero {
+    width: 100%;
+    margin: 0;
+    padding: 1rem;
+    border-radius: 1.2rem;
+  }
+
+  .mode-controller .settings-panel {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: 100%;
+    height: auto;
+    transform: none;
+    border-left: 0;
+    border-top: 1px solid color-mix(in srgb, var(--theme-ring) 48%, transparent);
+    box-shadow: none;
+  }
+
+  .mode-controller .settings-scroll {
+    height: auto;
+    overflow: visible;
+    padding: 1rem max(0.9rem, env(safe-area-inset-right)) max(1.1rem, env(safe-area-inset-bottom))
+      max(0.9rem, env(safe-area-inset-left));
   }
 }
 
@@ -596,13 +649,56 @@ button {
     min-height: 100svh;
   }
 
+  .tracker {
+    width: min(94vw, 70vh);
+  }
+
+  .tracker::before,
+  .tracker::after {
+    inset: 10%;
+  }
+
+  .tracker-value {
+    font-size: clamp(5.5rem, 28vw, 9.5rem);
+  }
+
   .settings-toggle {
-    top: 0.8rem;
-    right: 0.8rem;
+    top: max(0.65rem, env(safe-area-inset-top));
+    right: max(0.65rem, env(safe-area-inset-right));
+    width: 3rem;
+    height: 3rem;
   }
 
   .settings-scroll {
     padding-top: 4.4rem;
+  }
+
+  .controller-preview {
+    padding: 0.85rem;
+  }
+
+  .controller-icon {
+    width: 3.4rem;
+    height: 3.4rem;
+  }
+
+  .controller-value {
+    font-size: clamp(3rem, 18vw, 4.5rem);
+  }
+
+  .controller-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .controller-actions .control-button,
+  .button-row .soft-button {
+    min-height: 3rem;
+  }
+
+  .mode-controller .settings-section {
+    padding: 0.9rem;
+    border-radius: 1rem;
   }
 
   .fear-icon-grid,
