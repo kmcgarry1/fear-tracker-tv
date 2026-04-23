@@ -16,11 +16,17 @@ import {
 } from './lib/session-links'
 import {
   FONT_OPTIONS,
+  MAX_COUNTDOWNS,
   THEME_PRESETS,
+  clampCountdownMax,
+  clampCountdownValue,
   clampFear,
   createDefaultTrackerState,
+  getCountdownAdvance,
   normalizeTrackerState,
   type BackgroundMode,
+  type Countdown,
+  type RollOutcome,
   type ThemeColors,
   type TrackerState,
 } from './lib/tracker-config'
@@ -431,6 +437,91 @@ function updateColor(key: keyof ThemeColors, value: string) {
 function updateImageUrlsText(value: string) {
   imageUrlsText.value = value
 }
+
+function addCountdown() {
+  if (state.countdowns.length >= MAX_COUNTDOWNS) {
+    return
+  }
+
+  state.countdowns = [
+    ...state.countdowns,
+    {
+      id: createCountdownId(),
+      name: `Countdown ${state.countdowns.length + 1}`,
+      kind: 'standard',
+      value: 4,
+      max: 4,
+    },
+  ]
+}
+
+function updateCountdown(id: string, patch: Partial<Countdown>) {
+  state.countdowns = state.countdowns.map((countdown) => {
+    if (countdown.id !== id) {
+      return countdown
+    }
+
+    const nextMax = patch.max === undefined ? countdown.max : clampCountdownMax(Number(patch.max))
+    const nextValue =
+      patch.value === undefined ? clampCountdownValue(countdown.value, nextMax) : clampCountdownValue(Number(patch.value), nextMax)
+
+    return {
+      ...countdown,
+      ...patch,
+      max: nextMax,
+      value: nextValue,
+      effect: patch.effect?.trim() || patch.effect === '' ? patch.effect.trim() : countdown.effect,
+    }
+  })
+}
+
+function deleteCountdown(id: string) {
+  state.countdowns = state.countdowns.filter((countdown) => countdown.id !== id)
+}
+
+function tickCountdown(id: string, amount: number) {
+  state.countdowns = state.countdowns.map((countdown) =>
+    countdown.id === id
+      ? {
+          ...countdown,
+          value: clampCountdownValue(countdown.value - amount, countdown.max),
+        }
+      : countdown,
+  )
+}
+
+function resetCountdown(id: string) {
+  state.countdowns = state.countdowns.map((countdown) =>
+    countdown.id === id
+      ? {
+          ...countdown,
+          value: countdown.max,
+        }
+      : countdown,
+  )
+}
+
+function completeCountdown(id: string) {
+  state.countdowns = state.countdowns.map((countdown) =>
+    countdown.id === id
+      ? {
+          ...countdown,
+          value: 0,
+        }
+      : countdown,
+  )
+}
+
+function applyRollOutcome(outcome: RollOutcome) {
+  state.countdowns = state.countdowns.map((countdown) => ({
+    ...countdown,
+    value: clampCountdownValue(countdown.value - getCountdownAdvance(countdown.kind, outcome), countdown.max),
+  }))
+}
+
+function createCountdownId() {
+  return `countdown-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
 </script>
 
 <template>
@@ -468,6 +559,7 @@ function updateImageUrlsText(value: string) {
       v-if="viewMode === 'display'"
       :icon="iconForFear"
       :fear-value-label="fearValueLabel"
+      :countdowns="state.countdowns"
       @increment="incrementFear"
       @decrement="decrementFear"
     />
@@ -518,6 +610,13 @@ function updateImageUrlsText(value: string) {
       @update-youtube-url="state.youtubeUrl = $event"
       @update-image-urls-text="updateImageUrlsText"
       @cycle-background="cycleBackground"
+      @add-countdown="addCountdown"
+      @update-countdown="updateCountdown"
+      @delete-countdown="deleteCountdown"
+      @tick-countdown="tickCountdown"
+      @reset-countdown="resetCountdown"
+      @complete-countdown="completeCountdown"
+      @apply-roll-outcome="applyRollOutcome"
     />
   </div>
 </template>

@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { Icon } from '@iconify/vue'
 
+import CountdownBoard from './CountdownBoard.vue'
+import type { Countdown } from '../lib/tracker-config'
+
 defineProps<{
   icon: string
   fearValueLabel: string
+  countdowns: Countdown[]
 }>()
 
 const emit = defineEmits<{
@@ -19,5 +23,6 @@ const emit = defineEmits<{
       <Icon class="tracker-icon" :icon="icon" />
       <span class="tracker-value">{{ fearValueLabel }}</span>
     </button>
+    <CountdownBoard :countdowns="countdowns" />
   </main>
 </template>

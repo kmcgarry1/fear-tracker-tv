@@ -151,7 +151,9 @@ button {
 
 .display-stage {
   display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   place-items: center;
+  gap: clamp(1rem, 2vw, 2rem);
   padding: 4vw;
 }
 
@@ -246,6 +248,98 @@ button {
 
 .fear-high .tracker-value {
   animation: glitch-flare 1.8s ease-in-out infinite;
+}
+
+.countdown-board {
+  position: relative;
+  z-index: 2;
+  width: min(86rem, 100%);
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.8rem;
+  animation: countdown-board-float 23s ease-in-out infinite;
+}
+
+.countdown-card {
+  position: relative;
+  display: grid;
+  gap: 0.55rem;
+  min-height: 9rem;
+  padding: 0.9rem;
+  overflow: hidden;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--theme-background) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-ring) 50%, transparent);
+  box-shadow:
+    0 0 32px color-mix(in srgb, var(--theme-shadow) 36%, transparent),
+    inset 0 0 28px color-mix(in srgb, var(--theme-background-accent) 36%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.countdown-card::before {
+  content: '';
+  position: absolute;
+  inset: -30% 22% 42%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--theme-glow) 26%, transparent), transparent 68%);
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.countdown-card.complete {
+  border-color: color-mix(in srgb, var(--theme-glow) 70%, transparent);
+}
+
+.countdown-card-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--theme-text) 76%, transparent);
+}
+
+.countdown-card h2 {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-family: var(--tracker-font);
+  font-size: clamp(1.15rem, 2.4vw, 1.8rem);
+  line-height: 1.05;
+}
+
+.countdown-value {
+  color: var(--theme-glow);
+}
+
+.countdown-pips {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0.5rem, 1fr));
+  gap: 0.28rem;
+}
+
+.countdown-pip {
+  height: 0.38rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--theme-text) 20%, transparent);
+}
+
+.countdown-pip.filled {
+  background: color-mix(in srgb, var(--theme-glow) 78%, var(--theme-accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--theme-shadow) 64%, transparent);
+}
+
+.countdown-effect {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  color: color-mix(in srgb, var(--theme-text) 84%, transparent);
+  font-size: 0.95rem;
+  line-height: 1.35;
 }
 
 .controller-stage {
@@ -492,10 +586,41 @@ button {
   border-color: color-mix(in srgb, var(--theme-glow) 40%, transparent);
 }
 
+.soft-button.danger {
+  border-color: color-mix(in srgb, #ff6d6d 42%, transparent);
+  color: color-mix(in srgb, #ffd7d7 86%, var(--theme-text));
+}
+
 .fear-icon-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+.roll-outcome-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.countdown-editor-list {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.countdown-editor {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--theme-background) 42%, transparent);
+  border: 1px solid color-mix(in srgb, var(--theme-ring) 34%, transparent);
+}
+
+.countdown-number-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
 }
 
 .slot-card {
@@ -536,6 +661,16 @@ button {
   }
   50% {
     filter: drop-shadow(0 0 28px color-mix(in srgb, var(--theme-shadow) 38%, transparent));
+  }
+}
+
+@keyframes countdown-board-float {
+  0%,
+  100% {
+    transform: translate3d(0.5vw, 0, 0);
+  }
+  50% {
+    transform: translate3d(-0.45vw, -0.35vh, 0);
   }
 }
 
@@ -591,6 +726,10 @@ button {
 
   .tracker {
     width: min(88vw, 76vh);
+  }
+
+  .countdown-board {
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
   }
 
   .tracker-value {
@@ -703,6 +842,8 @@ button {
 
   .fear-icon-grid,
   .color-grid,
+  .countdown-number-grid,
+  .roll-outcome-grid,
   .qr-grid {
     grid-template-columns: 1fr;
   }
